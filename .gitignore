@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+*/node_modules/
+venv/
+*/venv/
+__pycache__/
+*.pyc
+
+# Secrets & Local Configurations
+.env
+*/.env
+*.env.local
+
+# Build Outputs & Logs
+dist/
+*/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+.env
+..env
+*.env
+
+.env
+..env
+*.env

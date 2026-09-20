@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: sre_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: incident_engine_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ai-engine:
+    build: ./ai-agent-engine
+    container_name: sre_ai_engine
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+
+  gateway:
+    build: ./gateway-service
+    container_name: sre_gateway
+    environment:
+      - PORT=5000
+      - DB_HOST=mysql-db
+      - DB_USER=root
+      - DB_PASS=rootpassword
+      - DB_NAME=incident_engine_db
+      - AI_ENGINE_URL=http://ai-engine:8000
+      - NOTIFICATION_WEBHOOK_URL=${NOTIFICATION_WEBHOOK_URL}
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      ai-engine:
+        condition: service_started
+
+  dashboard:
+    build: ./frontend
+    container_name: sre_dashboard
+    ports:
+      - "5173:80"
+    depends_on:
+      - gateway
+
+volumes:
+  mysql_data:

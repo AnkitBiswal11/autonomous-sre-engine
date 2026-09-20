@@ -1,0 +1,38 @@
+CREATE DATABASE IF NOT EXISTS incident_engine_db;
+USE incident_engine_db;
+
+CREATE TABLE IF NOT EXISTS services (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(64) UNIQUE NOT NULL,
+  tier VARCHAR(32) DEFAULT 'CORE',
+  status VARCHAR(32) DEFAULT 'HEALTHY',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS incidents (
+  id VARCHAR(64) PRIMARY KEY,
+  service_id INT,
+  error_summary TEXT,
+  status VARCHAR(32) DEFAULT 'INVESTIGATING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP NULL,
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS rca_reports (
+  incident_id VARCHAR(64) PRIMARY KEY,
+  report_markdown LONGTEXT,
+  culprit_commit VARCHAR(64),
+  suggested_fix TEXT,
+  approval_status VARCHAR(32) DEFAULT 'PENDING',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
+);
+
+-- Seed Services
+INSERT IGNORE INTO services (id, name, tier, status) VALUES
+  (1, 'DATABASE_CORE', 'DATA', 'HEALTHY'),
+  (2, 'AUTH_SERVICE', 'CRITICAL', 'HEALTHY'),
+  (3, 'PAYMENT_SERVICE', 'CRITICAL', 'HEALTHY'),
+  (4, 'ORDER_SERVICE', 'BUSINESS', 'HEALTHY');
