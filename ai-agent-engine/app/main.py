@@ -21,6 +21,7 @@ app.add_middleware(
 )
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+ACTIVE_MODEL = "openai/gpt-oss-20b"
 
 chat_sessions = {}
 
@@ -77,7 +78,7 @@ Provide a concise, technical Root Cause Analysis in Markdown with:
 
     try:
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model=ACTIVE_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=600
@@ -136,7 +137,7 @@ Be direct, technical, and concise. Address risk, secondary blast radius, rollbac
 
     try:
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model=ACTIVE_MODEL,
             messages=conversation_window,
             temperature=0.3,
             max_tokens=400
@@ -167,7 +168,7 @@ Respond ONLY with valid JSON. No markdown backticks, no wrapping text.
 
     try:
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model=ACTIVE_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=700
@@ -199,10 +200,10 @@ Respond ONLY with valid JSON. No markdown backticks, no wrapping text.
 --- a/src/config/pool.ts
 +++ b/src/config/pool.ts
 @@ -12,3 +12,4 @@
-   connectionTimeoutMillis: 2000,
-   idleTimeoutMillis: 30000,
-+  max: 20,
-+  acquireTimeoutMillis: 5000;""",
+    connectionTimeoutMillis: 2000,
+    idleTimeoutMillis: 30000,
++   max: 20,
++   acquireTimeoutMillis: 5000;""",
             "ci_guardrail": """name: Enforce Pool & Timeout Limits
 on: [pull_request]
 jobs:
