@@ -56,3 +56,124 @@ An enterprise-grade, event-driven Site Reliability Engineering (SRE) automation 
                           |   React SRE Mission   |
                           |   Control Dashboard   | 
                           +-----------------------+
+
+
+---
+
+## 📂 Project Structure
+
+    autonomous-sre-engine/
+    ├── ai-agent-engine/              # Python FastAPI AI Diagnostic Service
+    │   ├── app/
+    │   │   └── main.py               # Groq LLM integrations, chat sessions, PR generator
+    │   ├── requirements.txt
+    │   └── .env.example
+    ├── gateway-service/              # Node.js / Express Gateway & Socket.io Hub
+    │   ├── src/
+    │   │   └── server.js             # Anomaly engine, blast radius calculator, canary probes
+    │   ├── package.json
+    │   └── .env.example
+    ├── frontend/                     # React Vite Mission Control Dashboard
+    │   ├── src/
+    │   │   ├── App.jsx               # Real-time charts, topology view, post-mortem modal
+    │   │   └── main.jsx
+    │   ├── package.json
+    │   └── vite.config.js
+    ├── init.sql                      # Database schema and seed services
+    ├── start-dev.bat                 # 1-Click native Windows orchestration launcher
+    ├── .gitignore
+    └── README.md
+
+---
+
+## 🚀 Quickstart (Local Native Setup)
+
+### Prerequisites
+
+* **Node.js** (v18.x or later)
+* **Python** (v3.10 or later)
+* **MySQL Server** (8.0+ running locally on port 3306)
+* **Groq API Key** ([Get free key here](https://console.groq.com/keys))
+
+---
+
+### 1. Database Initialization
+
+Run the provided schema in your local MySQL client:
+
+sql
+CREATE DATABASE IF NOT EXISTS incident_engine_db;
+USE incident_engine_db;
+
+-- Execute schema queries from init.sql
+
+(Alternatively: run mysql -u root -p < init.sql from your terminal)
+
+2. Environment Configuration
+AI Agent Service
+Copy ai-agent-engine/.env.example to ai-agent-engine/.env:
+
+GROQ_API_KEY=gsk_your_actual_groq_api_key_here
+GATEWAY_URL=http://localhost:5000
+
+Gateway Service
+Copy gateway-service/.env.example to gateway-service/.env:
+
+PORT=5000
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=your_mysql_password
+DB_NAME=incident_engine_db
+AI_ENGINE_URL=http://localhost:8000
+NOTIFICATION_WEBHOOK_URL=[https://discord.com/api/webhooks/your_webhook_url](https://discord.com/api/webhooks/your_webhook_url)
+
+3. Dependency Installation
+
+Terminal 1 — AI Engine:
+cd ai-agent-engine
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
+pip install -r requirements.txt
+
+Terminal 2 — Gateway Service:
+cd gateway-service
+npm install
+
+Terminal 3 — Frontend Dashboard:
+cd frontend
+npm install
+
+4. Run the Platform
+Option A: 1-Click Native Launcher (Windows)
+Double-click start-dev.bat or run:
+start-dev.bat
+
+Option B: Manual Execution
+-AI Engine: uvicorn app.main:app --reload --port 8000 (inside ai-agent-engine)
+-Gateway: node src/server.js (inside gateway-service)
+-Frontend: npm run dev (inside frontend)
+Open http://localhost:5173 in your browser.
+
+🧪 Verification & Demo Workflow
+-Observe Baseline: Verify telemetry graphs indicate healthy latency ($<50\text{ ms}$) and error rate ($<0.05\%$) alongside ● Gateway Online.
+-Inject Chaos: Select an outage scenario from the dropdown (e.g., Auth Service: Redis Lock Timeout) and click Simulate Outage Alert.
+-Inspect Real-Time Trace:
+Telemetry spikes to $>4000\text{ ms}$ and triggers the statistical anomaly banner ($+Z\sigma$).
+Blast radius highlights downstream dependent nodes as degraded.
+LLM generates a post-mortem isolating the root cause and culprit commit within 1 second.
+-Execute Self-Healing:
+Click ✓ Approve Remediation (or toggle ⚡ Auto-Heal: ON for zero-touch execution).
+Watch the 3-Stage Canary Health Verification run in sequence.
+Metrics drop back to the sub-50ms green baseline.
+-Inspect Auto-Generated PR: Click 🛠️ Auto-Generate Fix PR & Guardrail to view the unified git diff patch and GitHub Actions workflow synthesized to prevent regressions.
+-Circuit-Breaker Test: Toggle ⚠️ Fail Simulation: ACTIVE and trigger an alert to witness synthetic canary failure, circuit breaker tripping, and emergency automated rollback.
+
+🛡️ Security & Privacy Notice
+-Local .env credential files containing API keys or database passwords are fully ignored by .gitignore.
+-Never push production credentials or private webhook URLs to public repositories. Always reference .env.example.
+
+📄 License
+Distributed under the MIT License. See LICENSE for more information.
