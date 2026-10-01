@@ -7,23 +7,61 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// Multi-environment CORS configuration supporting Localhost, Vercel preview URLs, and Production
+const corsOriginValidator = (origin, callback) => {
+  if (
+    !origin ||
+    origin === 'http://localhost:5173' ||
+    origin === 'https://autonomous-sre-engine.vercel.app' ||
+    origin.endsWith('.vercel.app')
+  ) {
+    callback(null, true);
+  } else {
+    callback(new Error('Blocked by CORS policy'));
+  }
+};
+
+app.use(cors({
+  origin: corsOriginValidator,
+  credentials: true
+}));
 app.use(express.json());
 
 const server = http.createServer(app);
+
+// Socket.io initialization with identical CORS rules and fallback transports
 const io = new Server(server, {
-  cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }
+  cors: {
+    origin: corsOriginValidator,
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling']
 });
 
-// MySQL Connection Pool
+// MySQL Connection Pool (Configured for local development & Aiven Cloud SSL)
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
+  port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASS || '',
   database: process.env.DB_NAME || 'incident_engine_db',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' 
+    ? { rejectUnauthorized: false } 
+    : undefined
+});
+
+// Root Healthcheck route (prevents 404 on base URL visits)
+app.get('/', (req, res) => {
+  res.json({
+    status: 'HEALTHY',
+    service: 'autonomous-sre-gateway',
+    timestamp: new Date()
+  });
 });
 
 // Track degradation & platform policy states
@@ -166,7 +204,7 @@ async function verifyServiceRecovery(serviceName, incidentId) {
 
       io.emit('agent:step', {
         incidentId,
-        stepLog: `[PROBE ${probe.step}/3 FAILED] ${probe.name} check failed on ${probe.endpoint}.`,
+        stepLog: `[PROBE ${probe.step}/3 FAILED] ${probe.name} check failed on${probe.endpoint}.`,
         status: 'FAILED',
         timestamp: new Date()
       });
@@ -183,7 +221,7 @@ async function verifyServiceRecovery(serviceName, incidentId) {
 
     io.emit('agent:step', {
       incidentId,
-      stepLog: `[PROBE ${probe.step}/3 PASSED] ${probe.name} responded OK.`,
+      stepLog: `[PROBE ${probe.step}/3 PASSED]${probe.name} responded OK.`,
       status: 'VERIFYING',
       timestamp: new Date()
     });
@@ -241,7 +279,7 @@ async function executeRemediation(id) {
 
     return executedCommand;
   } else {
-    const rollbackCommand = `kubectl rollout undo deployment/${serviceName.toLowerCase()} && docker-compose restart ${serviceName.toLowerCase()}`;
+    const rollbackCommand = `kubectl rollout undo deployment/${serviceName.toLowerCase()} && docker-compose restart${serviceName.toLowerCase()}`;
 
     io.emit('agent:step', {
       incidentId: id,
