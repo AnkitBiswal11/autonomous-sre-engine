@@ -27,7 +27,7 @@ An enterprise-grade, event-driven Site Reliability Engineering (SRE) automation 
 
 ## 🏗️ System Architecture
 
-+-------------------------------+
+                      +-------------------------------+
                       |   Microservice Mesh Topology  |
                       | (Auth, Orders, Payment, DB)   |
                       +---------------+---------------+
@@ -42,17 +42,17 @@ An enterprise-grade, event-driven Site Reliability Engineering (SRE) automation 
         +-----------------------------+-----------------------------+
         |                             |                             |
         v                             v                             v
-+--------------------+       +--------------------+       +----------------------+
-| Z-Score Anomaly    |       | MySQL Ledger &     |       | AI Diagnostic Engine |
-| Detector & Canary  |       | MTTR Analytics     |       | (FastAPI + Groq LLM) |
-| Circuit Breaker    |       | (Audits & Reports) |       | (RCA & PR Synthesis) |
-+--------------------+       +--------------------+       +----------------------+
-|                             |                             |
-+-----------------------------+-----------------------------+
-|
-WebSocket (Socket.io)
-v
-+-----------------------+
-|   React SRE Mission   |
-|   Control Dashboard   |
-+-----------------------+
+ +--------------------+       +--------------------+       +----------------------+
+ | Z-Score Anomaly    |       | MySQL Ledger &     |       | AI Diagnostic Engine |
+ | Detector & Canary  |       | MTTR Analytics     |       | (FastAPI + Groq LLM) |
+ | Circuit Breaker    |       | (Audits & Reports) |       | (RCA & PR Synthesis) |
+ +--------------------+       +--------------------+       +----------------------+
+        |                             |                             |
+        +-----------------------------+-----------------------------+
+                                      |
+                             WebSocket (Socket.io)
+                                      v
+                          +-----------------------+
+                          |   React SRE Mission   |
+                          |   Control Dashboard   | 
+                          +-----------------------+
