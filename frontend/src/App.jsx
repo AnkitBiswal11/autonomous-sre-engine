@@ -5,7 +5,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ResponsiveContainer, AreaChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-const socket = io('http://localhost:5000');
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:5000';
+const AI_ENGINE_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000';
+
+const socket = io(GATEWAY_URL);
 
 export default function App() {
   const [scenarios, setScenarios] = useState([]);
@@ -178,7 +181,7 @@ export default function App() {
 
   const fetchScenarios = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/chaos/scenarios');
+      const res = await axios.get(`${GATEWAY_URL}/api/chaos/scenarios`);
       setScenarios(res.data);
       if (res.data.length > 0) setSelectedScenario(res.data[0].id);
     } catch (err) {
@@ -188,7 +191,7 @@ export default function App() {
 
   const fetchAuditLedger = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/incidents');
+      const res = await axios.get(`${GATEWAY_URL}/api/incidents`);
       setAuditLedger(res.data);
     } catch (err) {
       console.error('Failed to load audit ledger:', err.message);
@@ -197,7 +200,7 @@ export default function App() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/analytics/metrics');
+      const res = await axios.get(`${GATEWAY_URL}/api/analytics/metrics`);
       setAnalytics(res.data);
     } catch (err) {
       console.error('Failed to load analytics:', err.message);
@@ -207,7 +210,7 @@ export default function App() {
   const toggleAutonomousMode = async () => {
     try {
       const nextMode = !isAutonomousMode;
-      await axios.post('http://localhost:5000/api/policy/toggle-mode', { enabled: nextMode });
+      await axios.post(`${GATEWAY_URL}/api/policy/toggle-mode`, { enabled: nextMode });
       setIsAutonomousMode(nextMode);
     } catch (err) {
       console.error('Failed to toggle policy mode:', err.message);
@@ -217,7 +220,7 @@ export default function App() {
   const toggleFailMode = async () => {
     try {
       const nextMode = !simulateFailMode;
-      await axios.post('http://localhost:5000/api/policy/toggle-fail-mode', { enabled: nextMode });
+      await axios.post(`${GATEWAY_URL}/api/policy/toggle-fail-mode`, { enabled: nextMode });
       setSimulateFailMode(nextMode);
     } catch (err) {
       console.error('Failed to toggle failure test mode:', err.message);
@@ -227,7 +230,7 @@ export default function App() {
   const toggleChaosScheduler = async () => {
     try {
       const nextMode = !isChaosSchedulerActive;
-      await axios.post('http://localhost:5000/api/policy/toggle-chaos-scheduler', { enabled: nextMode });
+      await axios.post(`${GATEWAY_URL}/api/policy/toggle-chaos-scheduler`, { enabled: nextMode });
       setIsChaosSchedulerActive(nextMode);
     } catch (err) {
       console.error('Failed to toggle chaos scheduler:', err.message);
@@ -239,7 +242,7 @@ export default function App() {
     if (!scenario) return;
 
     try {
-      await axios.post('http://localhost:5000/api/alerts/webhook', {
+      await axios.post(`${GATEWAY_URL}/api/alerts/webhook`, {
         incidentId: scenario.id,
         serviceName: scenario.serviceName,
         errorSummary: scenario.errorSummary
@@ -252,7 +255,7 @@ export default function App() {
   const approveRemediation = async () => {
     if (!activeIncident) return;
     try {
-      await axios.post(`http://localhost:5000/api/incidents/${activeIncident.incidentId}/approve`);
+      await axios.post(`${GATEWAY_URL}/api/incidents/${activeIncident.incidentId}/approve`);
     } catch (err) {
       console.warn('Remediation error or circuit breaker triggered:', err.message);
     }
@@ -281,7 +284,7 @@ export default function App() {
     setIsQuerying(true);
 
     try {
-      const res = await axios.post('http://localhost:8000/api/chat', {
+      const res = await axios.post(`${AI_ENGINE_URL}/api/chat`, {
         incident_id: activeIncident?.incidentId || 'INC-GENERAL',
         context_rca: rcaReport,
         question: userMsg,
@@ -301,7 +304,7 @@ export default function App() {
   const handleGeneratePR = async (incidentId) => {
     setIsGeneratingPR(true);
     try {
-      const res = await axios.post(`http://localhost:5000/api/incidents/${incidentId}/generate-pr`);
+      const res = await axios.post(`${GATEWAY_URL}/api/incidents/${incidentId}/generate-pr`);
       setPrDraft(res.data);
     } catch (err) {
       alert('Failed to generate PR draft: ' + (err.response?.data?.error || err.message));
@@ -312,7 +315,7 @@ export default function App() {
 
   const openIncidentModal = async (incidentId) => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/incidents/${incidentId}/rca`);
+      const res = await axios.get(`${GATEWAY_URL}/api/incidents/${incidentId}/rca`);
       setSelectedAuditReport(res.data);
     } catch (err) {
       alert(err.response?.data?.error || 'No saved RCA found for this incident record.');
