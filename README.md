@@ -42,11 +42,11 @@ An enterprise-grade, event-driven Site Reliability Engineering (SRE) automation 
         +-----------------------------+-----------------------------+
         |                             |                             |
         v                             v                             v
- +--------------------+       +--------------------+       +----------------------+
- | Z-Score Anomaly    |       | MySQL Ledger &     |       | AI Diagnostic Engine |
- | Detector & Canary  |       | MTTR Analytics     |       | (FastAPI + Groq LLM) |
- | Circuit Breaker    |       | (Audits & Reports) |       | (RCA & PR Synthesis) |
- +--------------------+       +--------------------+       +----------------------+
+    +--------------------+       +--------------------+   +----------------------+
+    | Z-Score Anomaly    |       | MySQL Ledger &     |       | AI Diagnostic Engine |
+    | Detector & Canary  |       | MTTR Analytics     |       | (FastAPI + Groq LLM) |
+    | Circuit Breaker    |       | (Audits & Reports) |       | (RCA & PR Synthesis) |
+    +--------------------+       +--------------------+       +----------------------+
         |                             |                             |
         +-----------------------------+-----------------------------+
                                       |
