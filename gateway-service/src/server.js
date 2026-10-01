@@ -146,7 +146,7 @@ async function dispatchExternalAlert({ title, description, color, fields }) {
 
     await axios.post(NOTIFICATION_WEBHOOK_URL, payload, { timeout: 5000 });
   } catch (err) {
-    console.warn(`[NOTIFICATION ERROR] Failed to send outbound webhook:`, err.message);
+    console.warn('[NOTIFICATION ERROR] Failed to send outbound webhook:', err.message);
   }
 }
 
@@ -194,7 +194,7 @@ async function verifyServiceRecovery(serviceName, incidentId) {
 
       io.emit('agent:step', {
         incidentId,
-        stepLog: `[PROBE ${probe.step}/3 FAILED] ${probe.name} check failed on ${probe.endpoint}.`,
+        stepLog: `[PROBE ${probe.step}/3 FAILED] ${probe.name} check failed on${probe.endpoint}.`,
         status: 'FAILED',
         timestamp: new Date()
       });
@@ -211,7 +211,7 @@ async function verifyServiceRecovery(serviceName, incidentId) {
 
     io.emit('agent:step', {
       incidentId,
-      stepLog: `[PROBE ${probe.step}/3 PASSED] ${probe.name} responded OK.`,
+      stepLog: `[PROBE ${probe.step}/3 PASSED]${probe.name} responded OK.`,
       status: 'VERIFYING',
       timestamp: new Date()
     });
@@ -253,12 +253,12 @@ async function executeRemediation(id) {
   if (recoveryVerified) {
     try {
       await pool.query(
-        'UPDATE incidents SET status = "RESOLVED", resolved_at = NOW() WHERE id = ?',
-        [id]
+        'UPDATE incidents SET status = ?, resolved_at = NOW() WHERE id = ?',
+        ['RESOLVED', id]
       );
       await pool.query(
-        'UPDATE rca_reports SET approval_status = "APPROVED" WHERE incident_id = ?',
-        [id]
+        'UPDATE rca_reports SET approval_status = ? WHERE incident_id = ?',
+        ['APPROVED', id]
       );
     } catch (dbErr) {
       console.error('[DB UPDATE ERROR ON RESOLUTION]:', dbErr.message);
@@ -281,7 +281,7 @@ async function executeRemediation(id) {
 
     return executedCommand;
   } else {
-    const rollbackCommand = `kubectl rollout undo deployment/${serviceName.toLowerCase()} && docker-compose restart ${serviceName.toLowerCase()}`;
+    const rollbackCommand = `kubectl rollout undo deployment/${serviceName.toLowerCase()} && docker-compose restart${serviceName.toLowerCase()}`;
 
     io.emit('agent:step', {
       incidentId: id,
@@ -292,12 +292,12 @@ async function executeRemediation(id) {
 
     try {
       await pool.query(
-        'UPDATE incidents SET status = "ESCALATED", resolved_at = NULL WHERE id = ?',
-        [id]
+        'UPDATE incidents SET status = ?, resolved_at = NULL WHERE id = ?',
+        ['ESCALATED', id]
       );
       await pool.query(
-        'UPDATE rca_reports SET approval_status = "REJECTED" WHERE incident_id = ?',
-        [id]
+        'UPDATE rca_reports SET approval_status = ? WHERE incident_id = ?',
+        ['REJECTED', id]
       );
     } catch (dbErr) {
       console.error('[DB UPDATE ERROR ON ESCALATION]:', dbErr.message);
@@ -333,14 +333,14 @@ async function triggerIncident(incidentId, serviceName, errorSummary) {
   try {
     await pool.query(
       `INSERT INTO incidents (id, service_id, error_summary, status, created_at, resolved_at)
-       VALUES (?, ?, ?, 'INVESTIGATING', NOW(), NULL)
+       VALUES (?, ?, ?, ?, NOW(), NULL)
        ON DUPLICATE KEY UPDATE 
          service_id = VALUES(service_id),
          error_summary = VALUES(error_summary),
-         status = 'INVESTIGATING',
+         status = VALUES(status),
          created_at = NOW(),
          resolved_at = NULL`,
-      [incidentId, serviceId, errorSummary]
+      [incidentId, serviceId, errorSummary, 'INVESTIGATING']
     );
   } catch (dbErr) {
     console.warn('[DB WARN] Could not update incident start state:', dbErr.message);
@@ -425,7 +425,7 @@ app.post('/api/internal/rca-report', async (req, res) => {
   try {
     const query = `
       INSERT INTO rca_reports (incident_id, report_markdown, culprit_commit, suggested_fix, approval_status, created_at)
-      VALUES (?, ?, ?, ?, 'PENDING', NOW())
+      VALUES (?, ?, ?, ?, ?, NOW())
       ON DUPLICATE KEY UPDATE
         report_markdown = VALUES(report_markdown),
         culprit_commit = VALUES(culprit_commit),
@@ -437,7 +437,8 @@ app.post('/api/internal/rca-report', async (req, res) => {
       incidentId,
       reportMarkdown,
       culpritCommit || 'UNKNOWN',
-      suggestedFix || 'Refer to report markdown'
+      suggestedFix || 'Refer to report markdown',
+      'PENDING'
     ]);
 
     dispatchExternalAlert({
@@ -646,8 +647,15 @@ setInterval(async () => {
 
       try {
         await pool.query(
-          'INSERT INTO incidents (id, service_id, error_summary, status, created_at) VALUES (?, 3, ?, "INVESTIGATING", NOW()) ON DUPLICATE KEY UPDATE status="INVESTIGATING", created_at=NOW(), resolved_at=NULL',
-          [dynamicId, `Autonomous Alert: Metric deviation Z-Score ${zScore} exceeded baseline.`]
+          `INSERT INTO incidents (id, service_id, error_summary, status, created_at)
+           VALUES (?, 3, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE status = ?, created_at = NOW(), resolved_at = NULL`,
+          [
+            dynamicId,
+            `Autonomous Alert: Metric deviation Z-Score ${zScore} exceeded baseline.`,
+            'INVESTIGATING',
+            'INVESTIGATING'
+          ]
         );
       } catch (dbErr) {
         console.warn('[ANOMALY DB WARN]:', dbErr.message);
