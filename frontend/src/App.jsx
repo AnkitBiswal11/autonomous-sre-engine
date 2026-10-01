@@ -21,38 +21,27 @@ export default function App() {
   const [auditLedger, setAuditLedger] = useState([]);
   const [isGatewayOnline, setIsGatewayOnline] = useState(socket.connected);
 
-  // Autonomous Self-Healing Mode State
   const [isAutonomousMode, setIsAutonomousMode] = useState(false);
   const [autoHealCountdown, setAutoHealCountdown] = useState(null);
 
-  // Background Chaos Monkey Scheduler State
   const [isChaosSchedulerActive, setIsChaosSchedulerActive] = useState(false);
   const [chaosNextStrikeCountdown, setChaosNextStrikeCountdown] = useState(null);
   const [isChaosPaused, setIsChaosPaused] = useState(false);
 
-  // Circuit Breaker Failure Simulation State
   const [simulateFailMode, setSimulateFailMode] = useState(false);
   const [escalationDetails, setEscalationDetails] = useState(null);
 
-  // Blast Radius State
   const [blastRadiusServices, setBlastRadiusServices] = useState([]);
-
-  // Synthetic Canary Probes State
   const [canaryProbes, setCanaryProbes] = useState([]);
 
-  // SRE Follow-up Diagnostic Chat State (Multi-Turn)
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [isQuerying, setIsQuerying] = useState(false);
 
-  // Historical RCA Post-Mortem Modal State
   const [selectedAuditReport, setSelectedAuditReport] = useState(null);
-
-  // Automated Remediation PR State
   const [prDraft, setPrDraft] = useState(null);
   const [isGeneratingPR, setIsGeneratingPR] = useState(false);
 
-  // Executive MTTR & SLA Analytics State
   const [analytics, setAnalytics] = useState({
     totalIncidents: 0,
     resolvedIncidents: 0,
@@ -61,6 +50,34 @@ export default function App() {
     slaCompliance: 99.95,
     serviceBreakdown: []
   });
+
+  const fetchScenarios = async () => {
+    try {
+      const res = await axios.get(`${GATEWAY_URL}/api/chaos/scenarios`);
+      setScenarios(res.data);
+      if (res.data.length > 0) setSelectedScenario(res.data[0].id);
+    } catch (err) {
+      console.error('Failed to load scenarios:', err.message);
+    }
+  };
+
+  const fetchAuditLedger = async () => {
+    try {
+      const res = await axios.get(`${GATEWAY_URL}/api/incidents`);
+      setAuditLedger(res.data);
+    } catch (err) {
+      console.error('Failed to load audit ledger:', err.message);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      const res = await axios.get(`${GATEWAY_URL}/api/analytics/metrics`);
+      setAnalytics(res.data);
+    } catch (err) {
+      console.error('Failed to load analytics:', err.message);
+    }
+  };
 
   useEffect(() => {
     fetchScenarios();
@@ -92,7 +109,7 @@ export default function App() {
       setIsChaosPaused(data.paused);
     });
 
-    socket.on('policy:auto_healing_scheduled', (data) => {
+    socket.on('policy:auto_healing_scheduled', () => {
       let secondsLeft = 3;
       setAutoHealCountdown(secondsLeft);
       const timer = setInterval(() => {
@@ -128,6 +145,8 @@ export default function App() {
       setEscalationDetails(null);
       setPrDraft(null);
       setBlastRadiusServices(data.blastRadius || []);
+      fetchAuditLedger();
+      fetchAnalytics();
     });
 
     socket.on('agent:step', (data) => {
@@ -179,34 +198,6 @@ export default function App() {
     };
   }, []);
 
-  const fetchScenarios = async () => {
-    try {
-      const res = await axios.get(`${GATEWAY_URL}/api/chaos/scenarios`);
-      setScenarios(res.data);
-      if (res.data.length > 0) setSelectedScenario(res.data[0].id);
-    } catch (err) {
-      console.error('Failed to load scenarios:', err.message);
-    }
-  };
-
-  const fetchAuditLedger = async () => {
-    try {
-      const res = await axios.get(`${GATEWAY_URL}/api/incidents`);
-      setAuditLedger(res.data);
-    } catch (err) {
-      console.error('Failed to load audit ledger:', err.message);
-    }
-  };
-
-  const fetchAnalytics = async () => {
-    try {
-      const res = await axios.get(`${GATEWAY_URL}/api/analytics/metrics`);
-      setAnalytics(res.data);
-    } catch (err) {
-      console.error('Failed to load analytics:', err.message);
-    }
-  };
-
   const toggleAutonomousMode = async () => {
     try {
       const nextMode = !isAutonomousMode;
@@ -247,6 +238,8 @@ export default function App() {
         serviceName: scenario.serviceName,
         errorSummary: scenario.errorSummary
       });
+      await fetchAuditLedger();
+      await fetchAnalytics();
     } catch (err) {
       console.error('Trigger failure:', err.message);
     }
@@ -256,8 +249,12 @@ export default function App() {
     if (!activeIncident) return;
     try {
       await axios.post(`${GATEWAY_URL}/api/incidents/${activeIncident.incidentId}/approve`);
+      await fetchAuditLedger();
+      await fetchAnalytics();
     } catch (err) {
       console.warn('Remediation error or circuit breaker triggered:', err.message);
+      await fetchAuditLedger();
+      await fetchAnalytics();
     }
   };
 
@@ -356,7 +353,6 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Chaos Monkey Scheduler Toggle */}
             <button
               onClick={toggleChaosScheduler}
               style={{
@@ -377,7 +373,6 @@ export default function App() {
               <span>{isChaosSchedulerActive ? '🐒 Chaos Monkey: ON' : '🐒 Chaos Monkey: OFF'}</span>
             </button>
 
-            {/* Circuit Breaker Probe Failure Mode Toggle */}
             <button
               onClick={toggleFailMode}
               style={{
@@ -398,7 +393,6 @@ export default function App() {
               <span>{simulateFailMode ? '⚠️ Fail Simulation: ACTIVE' : '⚙️ Healthy Verification'}</span>
             </button>
 
-            {/* Autonomous Auto-Healing Mode Toggle */}
             <button
               onClick={toggleAutonomousMode}
               style={{
@@ -432,7 +426,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Chaos Monkey Scheduler Live Countdown Banner */}
         {isChaosSchedulerActive && (
           <div style={{
             background: '#1c1917',
@@ -455,7 +448,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Executive MTTR & SLA Analytics Panel */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
           <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', padding: '14px 16px' }}>
             <div style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 600 }}>AVERAGE MTTR</div>
@@ -490,7 +482,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Chaos Controller Bar */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: '#111827', border: '1px solid #1f2937', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px' }}>
           <select
             value={selectedScenario}
@@ -509,7 +500,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* Incident Status Banner */}
         <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <span style={{ fontSize: '0.85rem', color: '#9ca3af', fontWeight: 600 }}>Incident Status: </span>
           <span style={{
@@ -531,7 +521,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Circuit Breaker Emergency Alert Card */}
         {incidentStatus === 'ESCALATED' && escalationDetails && (
           <div style={{
             background: '#450a0a',
@@ -557,7 +546,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Live Telemetry Monitors */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
           <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', padding: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -608,7 +596,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Microservice Mesh Topology & Cascading Blast Radius */}
         <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '0.9rem', fontWeight: 600, color: '#9ca3af', margin: 0 }}>
@@ -653,7 +640,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Active Incident Alert Banner */}
         {activeIncident && (
           <div style={{ background: '#1e1b4b', border: '1px solid #4338ca', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -667,7 +653,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Live Agent Trace Log */}
         <div style={{ background: '#030712', border: '1px solid #1f2937', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
           <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9ca3af', textAlign: 'center', margin: '0 0 12px 0' }}>Live Agent Trace Log</h2>
           <div style={{ height: '140px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -681,7 +666,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Synthetic Canary Verification Progress Cards */}
         {canaryProbes.length > 0 && (
           <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9ca3af', margin: '0 0 12px 0' }}>
@@ -714,7 +698,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Generated RCA Post-Mortem & Remediation Action */}
         {rcaReport && (
           <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -770,7 +753,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Diagnostic SRE Multi-Turn Chat Assistant */}
         {rcaReport && (
           <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f3f4f6', margin: '0 0 12px 0' }}>
@@ -913,7 +895,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Automated PR Draft & CI Guardrail Modal */}
         {prDraft && (
           <div style={{
             position: 'fixed',
@@ -1007,7 +988,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Historical RCA Post-Mortem Modal */}
         {selectedAuditReport && (
           <div style={{
             position: 'fixed',

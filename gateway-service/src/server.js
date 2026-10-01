@@ -8,7 +8,6 @@ require('dotenv').config();
 
 const app = express();
 
-// Multi-environment CORS configuration supporting Localhost, Vercel preview URLs, and Production
 const corsOriginValidator = (origin, callback) => {
   if (
     !origin ||
@@ -30,7 +29,6 @@ app.use(express.json());
 
 const server = http.createServer(app);
 
-// Socket.io initialization with identical CORS rules and fallback transports
 const io = new Server(server, {
   cors: {
     origin: corsOriginValidator,
@@ -40,7 +38,6 @@ const io = new Server(server, {
   transports: ['websocket', 'polling']
 });
 
-// MySQL Connection Pool (Configured for local development & Aiven Cloud SSL)
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   port: Number(process.env.DB_PORT) || 3306,
@@ -55,7 +52,6 @@ const pool = mysql.createPool({
     : undefined
 });
 
-// Root Healthcheck route (prevents 404 on base URL visits)
 app.get('/', (req, res) => {
   res.json({
     status: 'HEALTHY',
@@ -64,29 +60,31 @@ app.get('/', (req, res) => {
   });
 });
 
-// Track degradation & platform policy states
 let activeFailureService = null;
-let isAutonomousMode = false;              // Autonomous SRE Auto-Healing Flag
-let simulateRemediationFailure = false;    // Flag to test Circuit Breaker rollback
+let isAutonomousMode = false;
+let simulateRemediationFailure = false;
 
-// Chaos Engineering Background Scheduler State
 let isChaosSchedulerActive = false;
 const CHAOS_INTERVAL_SECONDS = 45;
 let chaosCountdown = CHAOS_INTERVAL_SECONDS;
-let chaosSchedulerTimer = null;
 
-// Rolling metric window for statistical anomaly detection
 const METRIC_HISTORY_WINDOW = 30;
 const rollingMetrics = [];
 let anomalyStreak = 0;
 let dynamicIncidentCooldown = false;
 
-// Microservice Mesh Dependency Topology Graph
 const SERVICE_DEPENDENCY_GRAPH = {
   DATABASE_CORE: { dependsOn: [], upstream: ['PAYMENT_SERVICE', 'AUTH_SERVICE'] },
   AUTH_SERVICE: { dependsOn: ['DATABASE_CORE'], upstream: ['ORDER_SERVICE', 'PAYMENT_SERVICE'] },
   PAYMENT_SERVICE: { dependsOn: ['AUTH_SERVICE', 'DATABASE_CORE'], upstream: ['ORDER_SERVICE'] },
   ORDER_SERVICE: { dependsOn: ['AUTH_SERVICE', 'PAYMENT_SERVICE'], upstream: [] }
+};
+
+const SERVICE_ID_MAP = {
+  DATABASE_CORE: 1,
+  AUTH_SERVICE: 2,
+  PAYMENT_SERVICE: 3,
+  ORDER_SERVICE: 4
 };
 
 const CHAOS_SCENARIOS = [
@@ -110,7 +108,6 @@ const CHAOS_SCENARIOS = [
   }
 ];
 
-// Calculate upstream blast radius recursively
 function calculateBlastRadius(failedService) {
   if (!failedService || !SERVICE_DEPENDENCY_GRAPH[failedService]) return [];
   const visited = new Set();
@@ -128,14 +125,10 @@ function calculateBlastRadius(failedService) {
   return Array.from(visited);
 }
 
-// Outbound Webhook Dispatcher
 const NOTIFICATION_WEBHOOK_URL = process.env.NOTIFICATION_WEBHOOK_URL || '';
 
 async function dispatchExternalAlert({ title, description, color, fields }) {
-  if (!NOTIFICATION_WEBHOOK_URL) {
-    console.log(`[NOTIFICATION SKIP] No NOTIFICATION_WEBHOOK_URL configured. Alert: "${title}"`);
-    return;
-  }
+  if (!NOTIFICATION_WEBHOOK_URL) return;
 
   try {
     const payload = {
@@ -152,13 +145,11 @@ async function dispatchExternalAlert({ title, description, color, fields }) {
     };
 
     await axios.post(NOTIFICATION_WEBHOOK_URL, payload, { timeout: 5000 });
-    console.log(`[NOTIFICATION SENT] Dispatched outbound alert: "${title}"`);
   } catch (err) {
     console.warn(`[NOTIFICATION ERROR] Failed to send outbound webhook:`, err.message);
   }
 }
 
-// Statistical Helper
 function calculateStats(values) {
   if (values.length < 5) return { mean: 0, stdDev: 0 };
   const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
@@ -167,7 +158,6 @@ function calculateStats(values) {
   return { mean, stdDev };
 }
 
-// Synthetic Canary Probes Verification Loop
 async function verifyServiceRecovery(serviceName, incidentId) {
   const probes = [
     { step: 1, name: 'Pod Liveness & Readiness Check', endpoint: '/healthz' },
@@ -204,7 +194,7 @@ async function verifyServiceRecovery(serviceName, incidentId) {
 
       io.emit('agent:step', {
         incidentId,
-        stepLog: `[PROBE ${probe.step}/3 FAILED] ${probe.name} check failed on${probe.endpoint}.`,
+        stepLog: `[PROBE ${probe.step}/3 FAILED] ${probe.name} check failed on ${probe.endpoint}.`,
         status: 'FAILED',
         timestamp: new Date()
       });
@@ -221,7 +211,7 @@ async function verifyServiceRecovery(serviceName, incidentId) {
 
     io.emit('agent:step', {
       incidentId,
-      stepLog: `[PROBE ${probe.step}/3 PASSED]${probe.name} responded OK.`,
+      stepLog: `[PROBE ${probe.step}/3 PASSED] ${probe.name} responded OK.`,
       status: 'VERIFYING',
       timestamp: new Date()
     });
@@ -230,13 +220,19 @@ async function verifyServiceRecovery(serviceName, incidentId) {
   return true;
 }
 
-// Remediation Execution Logic with Circuit-Breaker Auto-Rollback
 async function executeRemediation(id) {
-  const [incRows] = await pool.query(
-    'SELECT i.id, s.name as service_name FROM incidents i JOIN services s ON i.service_id = s.id WHERE i.id = ?',
-    [id]
-  );
-  const serviceName = incRows[0]?.service_name || 'PAYMENT_SERVICE';
+  let serviceName = 'PAYMENT_SERVICE';
+  try {
+    const [incRows] = await pool.query(
+      'SELECT i.id, s.name as service_name FROM incidents i LEFT JOIN services s ON i.service_id = s.id WHERE i.id = ?',
+      [id]
+    );
+    if (incRows.length > 0 && incRows[0].service_name) {
+      serviceName = incRows[0].service_name;
+    }
+  } catch (err) {
+    console.warn('[REMEDIATION DB LOOKUP ERROR]:', err.message);
+  }
 
   const actions = {
     PAYMENT_SERVICE: 'git revert b78d21c --no-edit && kubectl rollout restart deployment/payment-service',
@@ -256,10 +252,16 @@ async function executeRemediation(id) {
 
   if (recoveryVerified) {
     try {
-      await pool.query('UPDATE incidents SET status = "RESOLVED", resolved_at = NOW() WHERE id = ?', [id]);
-      await pool.query('UPDATE rca_reports SET approval_status = "APPROVED" WHERE incident_id = ?', [id]);
-    } catch (colErr) {
-      await pool.query('UPDATE incidents SET status = "RESOLVED" WHERE id = ?', [id]);
+      await pool.query(
+        'UPDATE incidents SET status = "RESOLVED", resolved_at = NOW() WHERE id = ?',
+        [id]
+      );
+      await pool.query(
+        'UPDATE rca_reports SET approval_status = "APPROVED" WHERE incident_id = ?',
+        [id]
+      );
+    } catch (dbErr) {
+      console.error('[DB UPDATE ERROR ON RESOLUTION]:', dbErr.message);
     }
 
     activeFailureService = null;
@@ -279,7 +281,7 @@ async function executeRemediation(id) {
 
     return executedCommand;
   } else {
-    const rollbackCommand = `kubectl rollout undo deployment/${serviceName.toLowerCase()} && docker-compose restart${serviceName.toLowerCase()}`;
+    const rollbackCommand = `kubectl rollout undo deployment/${serviceName.toLowerCase()} && docker-compose restart ${serviceName.toLowerCase()}`;
 
     io.emit('agent:step', {
       incidentId: id,
@@ -289,10 +291,16 @@ async function executeRemediation(id) {
     });
 
     try {
-      await pool.query('UPDATE incidents SET status = "ESCALATED", resolved_at = NULL WHERE id = ?', [id]);
-      await pool.query('UPDATE rca_reports SET approval_status = "REJECTED" WHERE incident_id = ?', [id]);
-    } catch (colErr) {
-      await pool.query('UPDATE incidents SET status = "ESCALATED" WHERE id = ?', [id]);
+      await pool.query(
+        'UPDATE incidents SET status = "ESCALATED", resolved_at = NULL WHERE id = ?',
+        [id]
+      );
+      await pool.query(
+        'UPDATE rca_reports SET approval_status = "REJECTED" WHERE incident_id = ?',
+        [id]
+      );
+    } catch (dbErr) {
+      console.error('[DB UPDATE ERROR ON ESCALATION]:', dbErr.message);
     }
 
     io.emit('incident:escalated', {
@@ -317,18 +325,25 @@ async function executeRemediation(id) {
   }
 }
 
-// Trigger Outage Alert Programmatically
 async function triggerIncident(incidentId, serviceName, errorSummary) {
   activeFailureService = serviceName;
   const blastRadius = calculateBlastRadius(serviceName);
+  const serviceId = SERVICE_ID_MAP[serviceName] || 3;
 
   try {
     await pool.query(
-      'UPDATE incidents SET status = "INVESTIGATING", created_at = NOW(), resolved_at = NULL WHERE id = ?',
-      [incidentId]
+      `INSERT INTO incidents (id, service_id, error_summary, status, created_at, resolved_at)
+       VALUES (?, ?, ?, 'INVESTIGATING', NOW(), NULL)
+       ON DUPLICATE KEY UPDATE 
+         service_id = VALUES(service_id),
+         error_summary = VALUES(error_summary),
+         status = 'INVESTIGATING',
+         created_at = NOW(),
+         resolved_at = NULL`,
+      [incidentId, serviceId, errorSummary]
     );
   } catch (dbErr) {
-    console.warn('[DB WARN] Could not reset incident timestamp:', dbErr.message);
+    console.warn('[DB WARN] Could not update incident start state:', dbErr.message);
   }
 
   io.emit('incident:triggered', {
@@ -357,7 +372,7 @@ async function triggerIncident(incidentId, serviceName, errorSummary) {
     service_name: serviceName,
     incidentId: incidentId,
     serviceName: serviceName
-  }).catch(err => console.error("Failed to reach AI engine:", err.message));
+  }).catch((err) => console.error("Failed to reach AI engine:", err.message));
 }
 
 io.on('connection', (socket) => {
@@ -366,11 +381,9 @@ io.on('connection', (socket) => {
   socket.emit('policy:chaos_scheduler', { isChaosSchedulerActive, countdown: chaosCountdown });
 });
 
-// Policy Controls
 app.post('/api/policy/toggle-mode', (req, res) => {
   const { enabled } = req.body;
   isAutonomousMode = Boolean(enabled);
-  console.log(`[POLICY] Autonomous Auto-Healing: ${isAutonomousMode ? 'ENABLED' : 'DISABLED'}`);
   io.emit('policy:mode', { isAutonomousMode });
   res.json({ success: true, isAutonomousMode });
 });
@@ -378,42 +391,34 @@ app.post('/api/policy/toggle-mode', (req, res) => {
 app.post('/api/policy/toggle-fail-mode', (req, res) => {
   const { enabled } = req.body;
   simulateRemediationFailure = Boolean(enabled);
-  console.log(`[POLICY] Remediation Failure Simulation: ${simulateRemediationFailure ? 'ENABLED' : 'DISABLED'}`);
   io.emit('policy:fail_mode', { simulateRemediationFailure });
   res.json({ success: true, simulateRemediationFailure });
 });
 
-// Toggle Background Chaos Monkey Scheduler
 app.post('/api/policy/toggle-chaos-scheduler', (req, res) => {
   const { enabled } = req.body;
   isChaosSchedulerActive = Boolean(enabled);
   chaosCountdown = CHAOS_INTERVAL_SECONDS;
-
-  console.log(`[CHAOS SCHEDULER] Background Chaos Monkey is now: ${isChaosSchedulerActive ? 'ENABLED' : 'DISABLED'}`);
   io.emit('policy:chaos_scheduler', { isChaosSchedulerActive, countdown: chaosCountdown });
   res.json({ success: true, isChaosSchedulerActive });
 });
 
-// Chaos Scenarios
 app.get('/api/chaos/scenarios', (req, res) => {
   res.json(CHAOS_SCENARIOS);
 });
 
-// Ingest Alert Webhook
 app.post('/api/alerts/webhook', async (req, res) => {
   const { incidentId, serviceName, errorSummary } = req.body;
   await triggerIncident(incidentId, serviceName, errorSummary);
   res.status(202).json({ status: 'ACCEPTED', incidentId });
 });
 
-// Stream Agent Traces
 app.post('/api/internal/agent-trace', (req, res) => {
   const { incidentId, stepLog, status } = req.body;
   io.emit('agent:step', { incidentId, stepLog, status, timestamp: new Date() });
   res.sendStatus(200);
 });
 
-// Persist RCA Report & Autonomous Dispatch
 app.post('/api/internal/rca-report', async (req, res) => {
   const { incidentId, reportMarkdown, culpritCommit, suggestedFix } = req.body;
 
@@ -446,7 +451,6 @@ app.post('/api/internal/rca-report', async (req, res) => {
     });
 
     if (isAutonomousMode) {
-      console.log(`[AUTONOMOUS SRE] Policy active. Triggering self-healing countdown for ${incidentId}...`);
       io.emit('policy:auto_healing_scheduled', { incidentId, delayMs: 3000 });
 
       setTimeout(async () => {
@@ -465,7 +469,6 @@ app.post('/api/internal/rca-report', async (req, res) => {
   }
 });
 
-// Manual Remediation Approval
 app.post('/api/incidents/:id/approve', async (req, res) => {
   const { id } = req.params;
   try {
@@ -477,7 +480,6 @@ app.post('/api/incidents/:id/approve', async (req, res) => {
   }
 });
 
-// Generate Remediation Pull Request Draft
 app.post('/api/incidents/:id/generate-pr', async (req, res) => {
   const { id } = req.params;
   try {
@@ -507,13 +509,12 @@ app.post('/api/incidents/:id/generate-pr', async (req, res) => {
   }
 });
 
-// Incident History & MTTR
 app.get('/api/incidents', async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT 
         i.id,
-        s.name AS service_name,
+        COALESCE(s.name, 'PAYMENT_SERVICE') AS service_name,
         i.error_summary,
         i.status,
         i.created_at,
@@ -530,7 +531,6 @@ app.get('/api/incidents', async (req, res) => {
   }
 });
 
-// Single RCA Fetch
 app.get('/api/incidents/:id/rca', async (req, res) => {
   const { id } = req.params;
   try {
@@ -546,7 +546,6 @@ app.get('/api/incidents/:id/rca', async (req, res) => {
   }
 });
 
-// Historical MTTR & SLA Analytics Aggregator
 app.get('/api/analytics/metrics', async (req, res) => {
   try {
     const [summaryRows] = await pool.query(`
@@ -586,11 +585,9 @@ app.get('/api/analytics/metrics', async (req, res) => {
   }
 });
 
-// Chaos Monkey Scheduler Interval (1-second tick)
 setInterval(async () => {
   if (!isChaosSchedulerActive) return;
 
-  // Don't inject new failures if an incident is currently being diagnosed or healed
   if (activeFailureService) {
     chaosCountdown = CHAOS_INTERVAL_SECONDS;
     io.emit('policy:chaos_countdown', { countdown: chaosCountdown, paused: true });
@@ -602,14 +599,11 @@ setInterval(async () => {
 
   if (chaosCountdown <= 0) {
     chaosCountdown = CHAOS_INTERVAL_SECONDS;
-    // Pick a random chaos scenario
     const scenario = CHAOS_SCENARIOS[Math.floor(Math.random() * CHAOS_SCENARIOS.length)];
-    console.log(`[CHAOS MONKEY] Triggering scheduled chaos injection: ${scenario.id} [${scenario.serviceName}]`);
     await triggerIncident(scenario.id, scenario.serviceName, `[AUTONOMOUS CHAOS] ${scenario.errorSummary}`);
   }
 }, 1000);
 
-// Telemetry Stream with Moving Z-Score Anomaly Detector
 setInterval(async () => {
   const isDown = Boolean(activeFailureService);
   const currentLatency = isDown
@@ -650,12 +644,10 @@ setInterval(async () => {
       const dynamicId = `INC-AUTO-${Date.now().toString().slice(-4)}`;
       const detectedService = 'PAYMENT_SERVICE';
 
-      console.log(`[ANOMALY ENGINE] Statistical anomaly detected (Z=${zScore}). Promoting to ${dynamicId}...`);
-
       try {
         await pool.query(
-          'INSERT INTO incidents (id, service_id, error_summary, status, created_at) VALUES (?, 3, ?, "INVESTIGATING", NOW()) ON DUPLICATE KEY UPDATE status="INVESTIGATING"',
-          [dynamicId, `Autonomous Alert: Metric deviation Z-Score ${zScore} exceeded statistical baseline.`]
+          'INSERT INTO incidents (id, service_id, error_summary, status, created_at) VALUES (?, 3, ?, "INVESTIGATING", NOW()) ON DUPLICATE KEY UPDATE status="INVESTIGATING", created_at=NOW(), resolved_at=NULL',
+          [dynamicId, `Autonomous Alert: Metric deviation Z-Score ${zScore} exceeded baseline.`]
         );
       } catch (dbErr) {
         console.warn('[ANOMALY DB WARN]:', dbErr.message);
